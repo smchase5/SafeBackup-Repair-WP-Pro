@@ -54,4 +54,8 @@ register_activation_hook(__FILE__, function () {
     require_once SBWP_PRO_DIR . 'includes/pro/class-sbwp-safe-update-db.php';
     $db = new SBWP_Safe_Update_DB();
     $db->create_table();
+
+    require_once SBWP_PRO_DIR . 'includes/pro/class-sbwp-conflict-db.php';
+    $conflict_db = new SBWP_Conflict_DB();
+    $conflict_db->create_table();
 });
