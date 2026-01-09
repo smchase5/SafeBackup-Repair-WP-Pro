@@ -69,6 +69,30 @@ class SBWP_Pro_Conflict_Scanner
                 return current_user_can('manage_options');
             }
         ));
+
+        // Quick scan (fast, no sandbox)
+        register_rest_route('sbwp/v1', '/conflict-scan/quick', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'run_quick_scan'),
+            'permission_callback' => function () {
+                return current_user_can('manage_options');
+            }
+        ));
+    }
+
+    /**
+     * Run a quick scan (fast, no sandbox needed)
+     */
+    public function run_quick_scan($request)
+    {
+        $params = $request->get_json_params();
+        $user_context = isset($params['user_context']) ? sanitize_textarea_field($params['user_context']) : '';
+
+        require_once SBWP_PRO_DIR . 'includes/pro/class-sbwp-quick-scan.php';
+        $scanner = new SBWP_Quick_Scan();
+        $result = $scanner->run($user_context);
+
+        return rest_ensure_response($result);
     }
 
     /**

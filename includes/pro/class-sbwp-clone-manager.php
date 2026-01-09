@@ -109,9 +109,26 @@ class SBWP_Clone_Manager
     {
         global $wpdb;
 
+        error_log('SBWP Clone: Starting database clone with prefix ' . $this->clone_prefix);
+
         $tables = $wpdb->get_results('SHOW TABLES', ARRAY_N);
         $prefix = $wpdb->prefix;
         $cloned_count = 0;
+
+        // Tables with lots of content data that aren't needed for conflict testing
+        $large_content_tables = array(
+            'posts',
+            'postmeta',
+            'comments',
+            'commentmeta',
+            'wc_orders',
+            'wc_order_items',
+            'wc_order_product_lookup',
+            'actionscheduler_actions',
+            'actionscheduler_logs',
+            'yoast_seo_links',
+            'woocommerce_sessions'
+        );
 
         foreach ($tables as $table) {
             $table_name = $table[0];
@@ -130,17 +147,27 @@ class SBWP_Clone_Manager
             // Create table like original
             $result = $wpdb->query("CREATE TABLE `$clone_table` LIKE `$table_name`");
             if ($result === false) {
+                error_log("SBWP Clone: Failed to create table $clone_table");
                 return new WP_Error('db_clone_failed', "Failed to create clone table: $clone_table");
             }
 
-            // Copy data
-            $wpdb->query("INSERT INTO `$clone_table` SELECT * FROM `$table_name`");
+            // For large content tables, only copy essential config data or limited rows
+            if (in_array($suffix, $large_content_tables)) {
+                // Just copy table structure, skip data for conflict testing
+                error_log("SBWP Clone: Skipped data for large table: $suffix");
+            } else {
+                // Copy data for smaller config/settings tables
+                $wpdb->query("INSERT INTO `$clone_table` SELECT * FROM `$table_name`");
+            }
+
             $cloned_count++;
         }
 
         if ($cloned_count === 0) {
             return new WP_Error('no_tables', 'No tables were cloned');
         }
+
+        error_log("SBWP Clone: Successfully cloned {$cloned_count} tables");
 
         return $cloned_count;
     }

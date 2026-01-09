@@ -18,6 +18,7 @@ class SBWP_Conflict_Isolation
     private $clone_id;
     private $clone_prefix;
     private $user_context;
+    private $js_monitor;
     private $baseline_log_position;
 
     public function __construct()
@@ -47,6 +48,10 @@ class SBWP_Conflict_Isolation
         // Mark as running
         $this->session_db->update_status($session_id, 'running');
 
+        // Initialize JS Monitor for checking frontend errors
+        require_once SBWP_PRO_DIR . 'includes/pro/class-sbwp-js-monitor.php';
+        $this->js_monitor = new SBWP_JS_Monitor();
+
         $result = array(
             'status' => 'completed',
             'user_context' => $this->user_context,
@@ -65,6 +70,7 @@ class SBWP_Conflict_Isolation
                 'active_theme' => ''
             ),
             'debug_log_excerpt' => '',
+            'js_errors' => array(),
             'generated_email' => null
         );
 
@@ -151,8 +157,9 @@ class SBWP_Conflict_Isolation
                 $result['theme_conflict'] = $theme_test['is_theme_conflict'];
             }
 
-            // Step 8: Get debug log excerpt
+            // Step 8: Get debug log excerpt and JS errors
             $result['debug_log_excerpt'] = $this->get_new_log_entries();
+            $result['js_errors'] = $this->get_js_errors_since_baseline();
 
             // Step 9: AI Analysis
             if ($result['culprit']) {
@@ -239,10 +246,25 @@ class SBWP_Conflict_Isolation
         $log_path = WP_CONTENT_DIR . '/debug.log';
         $this->baseline_log_position = file_exists($log_path) ? filesize($log_path) : 0;
 
+        // Record JS error baseline timestamp
+        $this->baseline_js_timestamp = time() * 1000;
+
         return array(
             'log_position' => $this->baseline_log_position,
+            'js_timestamp' => $this->baseline_js_timestamp,
             'timestamp' => time()
         );
+    }
+
+    /**
+     * Get JS errors since baseline
+     */
+    private function get_js_errors_since_baseline()
+    {
+        if (!$this->js_monitor || !isset($this->baseline_js_timestamp)) {
+            return array();
+        }
+        return $this->js_monitor->get_errors_since($this->baseline_js_timestamp);
     }
 
     /**
@@ -477,12 +499,17 @@ class SBWP_Conflict_Isolation
     {
         $clone_url = $this->clone_manager->get_clone_url($this->clone_id, '/');
 
+        error_log("SBWP Conflict: Running health check on {$clone_url}");
+
         $response = wp_remote_get($clone_url, array(
-            'timeout' => 15,
-            'sslverify' => false
+            'timeout' => 10, // Reduced timeout to prevent long hangs
+            'sslverify' => false,
+            'redirection' => 5,
+            'blocking' => true
         ));
 
         if (is_wp_error($response)) {
+            error_log("SBWP Conflict: Health check failed - " . $response->get_error_message());
             return array(
                 'passed' => false,
                 'errors' => array($response->get_error_message())
@@ -492,6 +519,8 @@ class SBWP_Conflict_Isolation
         $status_code = wp_remote_retrieve_response_code($response);
         $body = wp_remote_retrieve_body($response);
         $errors = array();
+
+        error_log("SBWP Conflict: Health check response - HTTP {$status_code}, body length: " . strlen($body));
 
         // Check for error indicators
         $has_error = false;

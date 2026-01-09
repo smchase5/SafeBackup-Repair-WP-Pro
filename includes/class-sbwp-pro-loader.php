@@ -28,6 +28,11 @@ class SBWP_Pro_Loader
         $ai = new SBWP_Pro_AI_Analyzer();
         $ai->init();
 
+        // Initialize JS Error Monitor for capturing frontend errors
+        require_once plugin_dir_path(dirname(__FILE__)) . 'includes/pro/class-sbwp-js-monitor.php';
+        $js_monitor = new SBWP_JS_Monitor();
+        $js_monitor->init();
+
         // Load Safe Update System classes
         require_once plugin_dir_path(dirname(__FILE__)) . 'includes/pro/class-sbwp-safe-update-db.php';
         require_once plugin_dir_path(dirname(__FILE__)) . 'includes/pro/class-sbwp-clone-manager.php';
